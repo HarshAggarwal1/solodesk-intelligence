@@ -330,58 +330,448 @@ app.post("/api/projects/:id/change-orders/:orderId/approve", authRequired, async
     res.json(saved);
 });
 
+
 app.get("/api/projects/:id/quotation.pdf", authRequired, async (req, res) => {
+  try {
     const p = await getProject(req.params.id, req.user.id);
-    if (!p) return res.status(404).json({
-        error: "Project not found"
-    });
+
+    if (!p) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
     const proposal = p.proposal;
-    if (!proposal) return res.status(400).json({
-        error: "Generate a proposal first"
+
+    if (!proposal) {
+      return res.status(400).json({ error: "Generate a proposal first" });
+    }
+
+    const currency = p.currency || "INR";
+    const rate = Math.max(0, Number(p.hourlyRate) || 0);
+    const requirements = proposal.requirements || [];
+    const changeOrders = p.changeOrders || [];
+
+    const originalHours = requirements.reduce(
+      (sum, item) => sum + Math.max(0, Number(item.estimatedHours) || 0),
+      0
+    );
+
+    const originalCost = originalHours * rate;
+
+    const orderValue = order =>
+      Math.max(0, Number(order.estimatedCost) || 0);
+
+    const orderHours = order =>
+      Math.max(0, Number(order.extraHours) || 0);
+
+    const pendingStatuses = [
+      "draft",
+      "internally_approved",
+      "sent_to_client"
+    ];
+
+    const pendingOrders = changeOrders.filter(order =>
+      pendingStatuses.includes(order.status || "draft")
+    );
+
+    const approvedOrders = changeOrders.filter(
+      order => order.status === "client_approved"
+    );
+
+    const pendingValue = pendingOrders.reduce(
+      (sum, order) => sum + orderValue(order),
+      0
+    );
+
+    const approvedValue = approvedOrders.reduce(
+      (sum, order) => sum + orderValue(order),
+      0
+    );
+
+    const approvedHours = approvedOrders.reduce(
+      (sum, order) => sum + orderHours(order),
+      0
+    );
+
+    const money = value =>
+      `${currency} ${Number(value || 0).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+
+    const date = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
     });
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="solodesk-quotation-${p.id.slice(0, 8)}.pdf"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="solodesk-quotation-${p.id.slice(0, 8)}.pdf"`
+    );
+
     const doc = new PDFDocument({
-        margin: 52,
-        size: "A4"
+      size: "A4",
+      margins: { top: 58, bottom: 58, left: 48, right: 48 },
+      bufferPages: true,
+      info: {
+        Title: `Project Proposal - ${p.title}`,
+        Author: "SoloDesk Intelligence",
+        Subject: "Project proposal and change orders"
+      }
     });
+
     doc.pipe(res);
-    doc.fontSize(24).text("SoloDesk Intelligence", {
-        continued: false
-    });
-    doc.moveDown(0.4).fontSize(18).text("Project Proposal / Quotation");
-    doc.moveDown().fontSize(11).text(`Project: ${p.title}`).text(`Client: ${p.clientName || "Not specified"}`).text(`Date: ${new Date().toLocaleDateString("en-IN")}`).text(`Currency: ${p.currency}`);
-    doc.moveDown().fontSize(13).text("Summary");
-    doc.fontSize(10).text(proposal.summary || "Review the requirements below.");
-    doc.moveDown().fontSize(13).text("Deliverables and estimates");
-    let total = 0;
-    for (const r of proposal.requirements || []) {
-        const hours = Math.max(0, Number(r.estimatedHours) || 0);
-        total += hours;
-        doc.fontSize(10).text(`${r.description} — ${hours} hours`, {
-            indent: 10
+
+    const pageWidth = doc.page.width;
+    const left = 48;
+    const right = pageWidth - 48;
+    const contentWidth = right - left;
+    const ink = "#172033";
+    const muted = "#64748b";
+    const accent = "#3448c5";
+    const pale = "#f1f4ff";
+    const line = "#dce2ec";
+
+    function ensureSpace(height = 50) {
+      if (doc.y + height > doc.page.height - 65) {
+        doc.addPage();
+      }
+    }
+
+    function heading(title, subtitle) {
+      ensureSpace(65);
+      doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").fontSize(13).fillColor(ink)
+        .text(title, left, doc.y, { width: contentWidth });
+      doc.moveDown(0.25);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y)
+        .lineWidth(1).strokeColor(line).stroke();
+      doc.moveDown(0.5);
+
+      if (subtitle) {
+        doc.font("Helvetica").fontSize(9).fillColor(muted)
+          .text(subtitle, left, doc.y, { width: contentWidth });
+        doc.moveDown(0.5);
+      }
+    }
+
+    function tableHeader(columns) {
+      ensureSpace(35);
+      const y = doc.y;
+
+      doc.rect(left, y, contentWidth, 25).fill(pale);
+
+      columns.forEach(col => {
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(ink)
+          .text(col.label, col.x, y + 8, {
+            width: col.width,
+            align: col.align || "left"
+          });
+      });
+
+      doc.y = y + 31;
+    }
+
+    function drawRow(columns, values, options = {}) {
+      const padding = 7;
+      const startY = doc.y;
+      const heights = values.map((value, i) => {
+        const col = columns[i];
+        return doc.font("Helvetica").fontSize(9)
+          .heightOfString(String(value ?? "—"), {
+            width: col.width,
+            align: col.align || "left"
+          });
+      });
+
+      const rowHeight = Math.max(20, ...heights) + padding * 2;
+
+      if (startY + rowHeight > doc.page.height - 65) {
+        doc.addPage();
+        tableHeader(columns);
+      }
+
+      const y = doc.y;
+
+      if (options.fill) {
+        doc.rect(left, y - 2, contentWidth, rowHeight).fill(options.fill);
+      }
+
+      values.forEach((value, i) => {
+        const col = columns[i];
+        doc.font(options.bold ? "Helvetica-Bold" : "Helvetica")
+          .fontSize(9)
+          .fillColor(ink)
+          .text(String(value ?? "—"), col.x, y + padding, {
+            width: col.width,
+            align: col.align || "left"
+          });
+      });
+
+      doc.y = y + rowHeight;
+      doc.moveTo(left, doc.y).lineTo(right, doc.y)
+        .lineWidth(0.5).strokeColor(line).stroke();
+      doc.moveDown(0.15);
+    }
+
+    function bulletList(items) {
+      if (!items?.length) return;
+
+      for (const item of items) {
+        ensureSpace(35);
+        doc.font("Helvetica").fontSize(9).fillColor(ink)
+          .text(`•  ${String(item)}`, left + 5, doc.y, {
+            width: contentWidth - 10,
+            lineGap: 3
+          });
+        doc.moveDown(0.3);
+      }
+    }
+
+    // Document header
+    doc.rect(0, 0, pageWidth, 115).fill(ink);
+
+    doc.font("Helvetica-Bold").fontSize(21).fillColor("#ffffff")
+      .text("SoloDesk Intelligence", left, 32);
+
+    doc.font("Helvetica").fontSize(10).fillColor("#d8defe")
+      .text("PROJECT PROPOSAL & QUOTATION", left, 63);
+
+    doc.font("Helvetica").fontSize(9).fillColor("#ffffff")
+      .text(`Issued ${date}`, left, 83);
+
+    doc.y = 135;
+
+    doc.font("Helvetica-Bold").fontSize(17).fillColor(ink)
+      .text(p.title || "Untitled Project", left, doc.y, {
+        width: contentWidth
+      });
+
+    doc.moveDown(0.6);
+
+    const metaY = doc.y;
+    const metaGap = 14;
+    const metaWidth = (contentWidth - metaGap) / 2;
+
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(muted)
+      .text("CLIENT", left, metaY);
+
+    doc.font("Helvetica").fontSize(10).fillColor(ink)
+      .text(p.clientName || "Not specified", left, metaY + 13, {
+        width: metaWidth
+      });
+
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(muted)
+      .text("CURRENCY", left + metaWidth + metaGap, metaY);
+
+    doc.font("Helvetica").fontSize(10).fillColor(ink)
+      .text(currency, left + metaWidth + metaGap, metaY + 13);
+
+    doc.y = metaY + 42;
+
+    heading("Project summary");
+    doc.font("Helvetica").fontSize(10).fillColor(ink)
+      .text(proposal.summary || "Project scope and estimates are listed below.", {
+        width: contentWidth,
+        lineGap: 4
+      });
+
+    // Original scope
+    heading("1. Original proposal", "Original scope and estimates");
+
+    const requirementColumns = [
+      { label: "DELIVERABLE", x: left + 7, width: 340 },
+      { label: "HOURS", x: right - 67, width: 60, align: "right" }
+    ];
+
+    tableHeader(requirementColumns);
+
+    for (const item of requirements) {
+      const hours = Math.max(0, Number(item.estimatedHours) || 0);
+      drawRow(requirementColumns, [
+        item.description || "Unnamed deliverable",
+        hours.toLocaleString("en-IN")
+      ]);
+    }
+
+    drawRow(
+      requirementColumns,
+      ["Total original effort", `${originalHours} hrs`],
+      { bold: true, fill: pale }
+    );
+
+    doc.moveDown(0.4);
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(ink)
+      .text(`Original estimate: ${money(originalCost)}`, {
+        width: contentWidth,
+        align: "right"
+      });
+
+    // Saved change orders
+    heading(
+      "2. Change orders",
+      `${changeOrders.length} saved change order(s). Internal approval is not client approval.`
+    );
+
+    if (changeOrders.length === 0) {
+      doc.font("Helvetica").fontSize(9).fillColor(muted)
+        .text("No change orders have been saved for this project.", {
+          width: contentWidth
         });
-    }
-    doc.moveDown().fontSize(12).text(`Estimated hours: ${total}`);
-    doc.text(`Indicative estimate: ${p.currency} ${(total * p.hourlyRate).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
-    doc.fontSize(9).text("This is a draft estimate, not a binding agreement. Confirm scope, rates, taxes, payment terms, and acceptance criteria before sending.", {
-        continued: false
-    });
-    for (const [title, items] of [
-            ["Assumptions", proposal.assumptions],
-            ["Exclusions", proposal.exclusions],
-            ["Open questions", proposal.questions]
-        ]) {
-        if (items?.length) {
-            doc.moveDown().fontSize(12).text(title);
-            doc.fontSize(10);
-            for (const item of items) doc.text(`• ${item}`, {
-                indent: 10
+      doc.moveDown();
+    } else {
+      const orderColumns = [
+        { label: "CHANGE REQUEST", x: left + 7, width: 205 },
+        { label: "HOURS", x: left + 220, width: 48, align: "right" },
+        { label: "EST. COST", x: left + 278, width: 105, align: "right" }
+      ];
+
+      tableHeader(orderColumns);
+
+      for (const order of changeOrders) {
+        const analysis = order.analysis || {};
+        const items = analysis.items || [];
+
+        const description = items.length
+          ? items.map(item => item.request).filter(Boolean).join("; ")
+          : order.notes || "Change request";
+
+        const status = (order.status || "draft")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, char => char.toUpperCase());
+
+        drawRow(orderColumns, [
+          `${order.id ? `#${String(order.id).slice(0, 8)} — ` : ""}${description}\nStatus: ${status}`,
+          `${orderHours(order)} hrs`,
+          money(orderValue(order))
+        ]);
+
+        if (order.notes) {
+          ensureSpace(30);
+          doc.font("Helvetica-Oblique").fontSize(8).fillColor(muted)
+            .text(`Notes: ${order.notes}`, left + 7, doc.y, {
+              width: contentWidth - 14,
+              lineGap: 2
             });
+          doc.moveDown(0.5);
         }
+      }
     }
+
+    // Financial summary
+    heading("3. Financial summary");
+
+    const financialColumns = [
+      { label: "DESCRIPTION", x: left + 7, width: 310 },
+      { label: "AMOUNT", x: right - 135, width: 125, align: "right" }
+    ];
+
+    tableHeader(financialColumns);
+
+    drawRow(financialColumns, [
+      "Original proposal estimate",
+      money(originalCost)
+    ]);
+
+    drawRow(financialColumns, [
+      "Pending change orders (not client-approved)",
+      money(pendingValue)
+    ]);
+
+    drawRow(financialColumns, [
+      "Client-approved change orders",
+      money(approvedValue)
+    ]);
+
+    drawRow(
+      financialColumns,
+      [
+        "Current indicative value (original + client-approved changes)",
+        money(originalCost + approvedValue)
+      ],
+      { bold: true, fill: pale }
+    );
+
+    doc.moveDown(0.3);
+    doc.font("Helvetica").fontSize(8).fillColor(muted)
+      .text(
+        "Pending change-order amounts are excluded from the current indicative value until client approval is recorded. Estimates are not binding until mutually agreed.",
+        { width: contentWidth, lineGap: 3 }
+      );
+
+    // Proposal details
+    for (const [title, items] of [
+      ["4. Assumptions", proposal.assumptions],
+      ["5. Exclusions", proposal.exclusions],
+      ["6. Open questions", proposal.questions]
+    ]) {
+      if (items?.length) {
+        heading(title);
+        bulletList(items);
+      }
+    }
+
+    ensureSpace(80);
+    heading("Terms and approval");
+    doc.font("Helvetica").fontSize(9).fillColor(ink)
+      .text(
+        "This document contains indicative estimates for review. Confirm deliverables, rates, taxes, payment terms, schedule, and acceptance criteria before treating the quotation as binding.",
+        { width: contentWidth, lineGap: 4 }
+      );
+
+    doc.moveDown(1.5);
+
+    const signatureY = doc.y;
+    const signatureWidth = (contentWidth - 30) / 2;
+
+    doc.moveTo(left, signatureY + 25)
+      .lineTo(left + signatureWidth, signatureY + 25)
+      .strokeColor(line).stroke();
+
+    doc.moveTo(left + signatureWidth + 30, signatureY + 25)
+      .lineTo(right, signatureY + 25)
+      .strokeColor(line).stroke();
+
+    doc.font("Helvetica").fontSize(8).fillColor(muted)
+      .text("Service provider", left, signatureY + 32)
+      .text("Client approval", left + signatureWidth + 30, signatureY + 32);
+
+    // Add consistent footer and page numbering to every page.
+    const range = doc.bufferedPageRange();
+
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+
+      const footerY = doc.page.height - 38;
+
+      doc.moveTo(left, footerY - 8).lineTo(right, footerY - 8)
+        .lineWidth(0.5).strokeColor(line).stroke();
+
+      doc.font("Helvetica").fontSize(8).fillColor(muted)
+        .text("SoloDesk Intelligence • Project Proposal", left, footerY, {
+          lineBreak: false
+        });
+
+      doc.text(`Page ${i + 1} of ${range.count}`, left, footerY, {
+        width: contentWidth,
+        align: "right",
+        lineBreak: false
+      });
+    }
+
     doc.end();
+  } catch (error) {
+    console.error("Quotation PDF generation failed:", error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Could not generate quotation PDF" });
+    } else {
+      res.destroy(error);
+    }
+  }
 });
+
 app.get("/api/memory/:projectId", authRequired, async (req, res) => {
     const p = await getProject(req.params.projectId, req.user.id);
     if (!p) return res.status(404).json({

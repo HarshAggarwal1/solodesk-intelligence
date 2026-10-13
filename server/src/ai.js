@@ -106,52 +106,54 @@ async function callModel(system, user) {
       },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [
-            {
-              text:
-                system +
-                "\nOutput exactly one JSON object. No Markdown, no bullet points, and no text before or after the JSON."
-            }
-          ]
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: user }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 2048
+          parts: [{
+            text: system +
+              "\nYou MUST output exactly one valid JSON object. " +
+              "Do not output Markdown, headings, bullet points, or commentary. " +
+              "All required fields must contain actual values. " +
+              "Never use placeholders such as 'string' or abbreviated arrays."
+          }]
         }
+      },
+        contents: [
+        {
+          role: "user",
+          parts: [{ text: user }]
+        }
+      ],
+        generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json"
+      }
       }),
       signal: controller.signal
-    });
+  });
 
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 300);
-      throw new Error(`Gemma API returned ${response.status}: ${detail}`);
-    }
-
-    const data = await response.json();
-
-    const content = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("")
-      .trim();
-
-    console.log("Gemma response preview:", content?.slice(0, 1500));
-    console.log("Gemma response length:", content?.length);
-
-    if (!content) {
-      throw new Error("Gemma API returned an empty response");
-    }
-
-    return parseModelJson(content);
-
-  } finally {
-    clearTimeout(timer);
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 300);
+    throw new Error(`Gemma API returned ${response.status}: ${detail}`);
   }
+
+  const data = await response.json();
+
+  const content = data.candidates?.[0]?.content?.parts
+    ?.map(part => part.text || "")
+    .join("")
+    .trim();
+
+  console.log("Gemma response preview:", content?.slice(0, 1500));
+  console.log("Gemma response length:", content?.length);
+
+  if (!content) {
+    throw new Error("Gemma API returned an empty response");
+  }
+
+  return parseModelJson(content);
+
+} finally {
+  clearTimeout(timer);
+}
 }
 
 export async function generateProposal(project) {

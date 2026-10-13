@@ -284,6 +284,7 @@ function App() {
   }
 
   
+  
   async function sendForApproval(orderId) {
       const result = await act(
           () =>
@@ -295,13 +296,18 @@ function App() {
       );
 
       if (result?.approvalUrl) {
-          window.prompt(
-              "Copy this client approval link. It expires at " +
-                  new Date(result.expiresAt).toLocaleString(),
-              result.approvalUrl,
-          );
+          try {
+              await navigator.clipboard.writeText(result.approvalUrl);
+              setNotice("Approval link copied to clipboard. You can now share it with your client.");
+          } catch {
+              window.prompt(
+                  "Automatic copying failed. Copy this approval link:",
+                  result.approvalUrl,
+              );
+          }
       }
   }
+
 
 
   async function downloadPdf() {

@@ -71,7 +71,7 @@ async function callModel(system, user) {
             {
               text:
                 system +
-                "\nReturn only valid JSON. Do not wrap it in markdown."
+                "\nOutput exactly one JSON object. No Markdown, no bullet points, and no text before or after the JSON."
             }
           ]
         },

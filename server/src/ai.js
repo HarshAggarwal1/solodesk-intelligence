@@ -122,7 +122,7 @@ async function callModel(system, user) {
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
           responseMimeType: "application/json"
         }
       }),
@@ -141,7 +141,15 @@ async function callModel(system, user) {
       data.candidates?.[0]?.finishReason
     );
 
-    const content = data.candidates?.[0]?.content?.parts
+    const candidate = data.candidates?.[0];
+
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      throw new Error(
+        "Gemma response was truncated. Reduce the requested output size."
+      );
+    }
+
+    const content = candidate?.content?.parts
       ?.map(part => part.text || "")
       .join("")
       .trim();
@@ -165,32 +173,27 @@ export async function generateProposal(project) {
 
 
   const prompt = `
-Create a useful freelance project proposal based on this brief.
+  Create a useful freelance project proposal based on this brief.
 
-CLIENT BRIEF:
-${project.brief}
+  CLIENT BRIEF:
+  ${project.brief}
 
-Return exactly one valid JSON object with these fields:
-- title: meaningful project title
-- summary: concise explanation of the proposed work
-- requirements: array of objects, each with id, description, category, estimatedHours
-- assumptions: array of explicit assumptions
-- exclusions: array of work not included
-- questions: array of questions for the client
-- milestones: array of objects with name, description, percentage
+  Return one compact JSON object with:
+  title, summary, requirements, assumptions, exclusions, questions, milestones.
 
-Rules:
-- Use actual content derived from the brief, never placeholders.
-- For "build a zip extraction app", identify plausible features such as ZIP upload,
-  archive validation, extraction, file listing, and error handling.
-- Include no more than 8 atomic requirements.
-- Keep descriptions under 300 characters.
-- Estimated hours must be nonnegative numbers.
-- Do not invent client approvals, budgets, or requirements.
-- Ask questions where platform, file-size limits, or security expectations are unclear.
-- Do not use ellipses or abbreviated arrays.
-- Return JSON only, without Markdown or commentary.
-`;
+  Each requirement must contain id, description, category, estimatedHours.
+  Each milestone must contain name, description, percentage.
+
+  Rules:
+  - Maximum 6 requirements and 3 milestones.
+  - Maximum 2 assumptions, 2 exclusions, and 3 questions.
+  - Keep all descriptions concise.
+  - Use actual values, never placeholders.
+  - Hours must be nonnegative numbers.
+  - Percentages must total 100.
+  - Do not invent client approvals or budgets.
+  - Return JSON only, with no Markdown or commentary.
+  `;
 
 
 

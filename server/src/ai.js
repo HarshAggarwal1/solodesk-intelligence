@@ -25,38 +25,60 @@ const proposalSchema = {
 };
 
 
-function parseModelJson(content) {
-  let text = content
-    .replace(/^\uFEFF/, "")
-    .trim();
 
-  // Remove Markdown code fences.
-  text = text
+function parseModelJson(content) {
+  const text = content
+    .replace(/^\uFEFF/, "")
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
 
-  // Extract the outermost JSON object.
   const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
 
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error(
-      `Gemma returned no complete JSON object. Response starts: ${text.slice(0, 200)}`
-    );
+  if (start === -1) {
+    throw new Error("Gemma returned no JSON object");
   }
 
-  const jsonText = text.slice(start, end + 1);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
 
-  try {
-    return JSON.parse(jsonText);
-  } catch (error) {
-    // Report the location, not the full client brief or model response.
-    throw new Error(
-      `Gemma returned malformed JSON at ${error.message}. ` +
-      `Response length: ${jsonText.length}`
-    );
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{") {
+      depth++;
+    } else if (char === "}") {
+      depth--;
+
+      if (depth === 0) {
+        const jsonText = text.slice(start, i + 1);
+
+        try {
+          return JSON.parse(jsonText);
+        } catch (error) {
+          throw new Error(
+            `Gemma returned malformed JSON: ${error.message}`
+          );
+        }
+      }
+    }
   }
+
+  throw new Error("Gemma returned incomplete JSON");
 }
 
 
@@ -100,7 +122,7 @@ async function callModel(system, user) {
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 4096
+          maxOutputTokens: 2048
         }
       }),
       signal: controller.signal
@@ -123,25 +145,32 @@ async function callModel(system, user) {
     }
 
     return parseModelJson(content);
-    
+
   } finally {
     clearTimeout(timer);
   }
 }
 
 export async function generateProposal(project) {
+
   const prompt = `
-Client/project brief:
-${project.brief}
+  Client/project brief:
+  ${project.brief}
 
-Return JSON matching this shape:
-${JSON.stringify(proposalSchema)}
+  Return JSON matching this shape:
+  ${JSON.stringify(proposalSchema)}
 
-Requirements must be atomic.
-Estimated hours must be nonnegative numbers.
-Do not invent a budget or claim that the client agreed to anything.
-Use questions for missing information.
-`;
+  Requirements must be atomic.
+  Estimated hours must be nonnegative numbers.
+  Do not invent a budget or claim that the client agreed to anything.
+  Use questions for missing information.
+
+  Return one JSON object only.
+  Include at most 20 requirements.
+  Keep each description under 300 characters.
+  Do not repeat the input brief.
+  `;
+
 
   const modelResult = await callModel(
     "You are a careful operations assistant for independent freelancers. " +

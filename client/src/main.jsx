@@ -886,7 +886,7 @@ function App() {
                                                 <span>
                                                     {p.changeOrders?.length ||
                                                         0}{" "}
-                                                    Saved change orders
+                                                    change orders
                                                 </span>
                                             </div>
                                             <div className="project-card-bottom">

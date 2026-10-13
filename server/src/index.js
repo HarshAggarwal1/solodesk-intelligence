@@ -510,8 +510,7 @@ app.post("/api/client-approval/:token/decision", async (req, res) => {
         clientApproval: {
             ...order.clientApproval,
             decision: parsed.data.decision,
-            decidedAt,
-            tokenHash: null
+            decidedAt
         }
     };
 

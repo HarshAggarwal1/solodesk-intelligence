@@ -24,24 +24,41 @@ const proposalSchema = {
   ]
 };
 
+
 function parseModelJson(content) {
-  // Remove Markdown code fences if present.
-  let text = content.trim()
+  let text = content
+    .replace(/^\uFEFF/, "")
+    .trim();
+
+  // Remove Markdown code fences.
+  text = text
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
 
-  // If the model added explanatory text, extract the JSON object.
+  // Extract the outermost JSON object.
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
 
   if (start === -1 || end === -1 || end < start) {
-    throw new Error("Gemma did not return a valid JSON object");
+    throw new Error(
+      `Gemma returned no complete JSON object. Response starts: ${text.slice(0, 200)}`
+    );
   }
 
-  text = text.slice(start, end + 1);
-  return JSON.parse(text);
+  const jsonText = text.slice(start, end + 1);
+
+  try {
+    return JSON.parse(jsonText);
+  } catch (error) {
+    // Report the location, not the full client brief or model response.
+    throw new Error(
+      `Gemma returned malformed JSON at ${error.message}. ` +
+      `Response length: ${jsonText.length}`
+    );
+  }
 }
+
 
 async function callModel(system, user) {
   const apiKey = process.env.GEMINI_API_KEY;

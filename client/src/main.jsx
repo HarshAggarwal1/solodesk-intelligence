@@ -1559,8 +1559,7 @@ function App() {
                                   selected.currency,
                                 )}
                               </p>
-                              {approved &&
-                                o.internallyApprovedAt && (
+                              {o.internallyApprovedAt && (
                                   <small>
                                     Internally
                                     approved

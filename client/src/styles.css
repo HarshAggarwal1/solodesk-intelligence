@@ -2978,3 +2978,66 @@ html[data-theme="light"] .dashboard-welcome .welcome-line.line-three {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+/* Client approval page — responsive layout */
+.client-approval-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    box-sizing: border-box;
+}
+
+.client-approval-card {
+    width: 100%;
+    max-width: 680px;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.client-approval-card .card {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.client-approval-card h1 {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+    line-height: 1.2;
+}
+
+.client-approval-card p,
+.client-approval-card small {
+    overflow-wrap: anywhere;
+}
+
+.client-approval-card .modal-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.client-approval-card .modal-actions button {
+    min-height: 44px;
+}
+
+@media (max-width: 600px) {
+    .client-approval-page {
+        padding: 16px 12px;
+    }
+
+    .client-approval-card {
+        padding: 20px 16px;
+        border-radius: 14px;
+    }
+
+    .client-approval-card .modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .client-approval-card .modal-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+}

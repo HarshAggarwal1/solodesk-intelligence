@@ -373,8 +373,8 @@ function App() {
     return <div className="loading">Loading SoloDesk Intelligence…</div>;
   if (!token)
     return (
-      <div className="auth-page">
-        <div className="auth-card card">
+      <div className="client-approval-page">
+        <div className="client-approval-card card">
           <div className="brand auth-brand">
             <div className="brand-mark">
               <Sparkles size={20} />

@@ -122,7 +122,7 @@ async function callModel(system, user) {
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 2048,
           responseMimeType: "application/json"
         }
       }),
@@ -135,6 +135,11 @@ async function callModel(system, user) {
     }
 
     const data = await response.json();
+
+    console.log(
+      "Gemma finish reason:",
+      data.candidates?.[0]?.finishReason
+    );
 
     const content = data.candidates?.[0]?.content?.parts
       ?.map(part => part.text || "")

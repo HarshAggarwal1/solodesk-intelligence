@@ -185,3 +185,30 @@ function mapProject(r) {
         updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at
     };
 }
+
+export async function findProjectByApprovalTokenHash(tokenHash) {
+    if (usePg) {
+        const result = await pool.query(
+            `SELECT * FROM projects
+             WHERE EXISTS (
+                 SELECT 1
+                 FROM jsonb_array_elements(change_orders) AS co
+                 WHERE co->'clientApproval'->>'tokenHash' = $1
+             )
+             LIMIT 1`,
+            [tokenHash]
+        );
+
+        return result.rows[0] ? mapProject(result.rows[0]) : null;
+    }
+
+    for (const project of local.projects) {
+        const order = (project.changeOrders || []).find(
+            item => item.clientApproval?.tokenHash === tokenHash
+        );
+
+        if (order) return { ...project, status: project.status || "active" };
+    }
+
+    return null;
+}

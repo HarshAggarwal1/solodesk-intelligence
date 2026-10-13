@@ -1,3 +1,4 @@
+import { randomBytes, createHash } from "node:crypto";
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -18,7 +19,8 @@ import {
     updateProject,
     getEvents,
     createUser,
-    findUserByEmail
+    findUserByEmail,
+    findProjectByApprovalTokenHash
 } from "./store.js";
 import {
     generateProposal,
@@ -330,6 +332,205 @@ app.post("/api/projects/:id/change-orders/:orderId/approve", authRequired, async
     res.json(saved);
 });
 
+const hashApprovalToken = token =>
+    createHash("sha256").update(token).digest("hex");
+
+// Freelancer generates a client approval link.
+app.post(
+    "/api/projects/:id/change-orders/:orderId/send-for-approval",
+    authRequired,
+    async (req, res) => {
+        const p = await getProject(req.params.id, req.user.id);
+
+        if (!p) {
+            return res.status(404).json({ error: "Project not found" });
+        }
+
+        const changeOrders = [...(p.changeOrders || [])];
+        const index = changeOrders.findIndex(
+            order => order.id === req.params.orderId
+        );
+
+        if (index === -1) {
+            return res.status(404).json({ error: "Change order not found" });
+        }
+
+        const order = changeOrders[index];
+
+        if (!["internally_approved", "sent_to_client"].includes(order.status)) {
+            return res.status(400).json({
+                error: "Internally approve the change order before sending it"
+            });
+        }
+
+        if (order.status === "sent_to_client" &&
+            order.clientApproval?.expiresAt &&
+            new Date(order.clientApproval.expiresAt) > new Date()) {
+            return res.status(409).json({
+                error: "An active approval link already exists"
+            });
+        }
+
+        const token = randomBytes(32).toString("hex");
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+            .toISOString();
+
+        changeOrders[index] = {
+            ...order,
+            status: "sent_to_client",
+            sentToClientAt: now.toISOString(),
+            clientApproval: {
+                tokenHash: hashApprovalToken(token),
+                expiresAt,
+                decision: null,
+                decidedAt: null
+            }
+        };
+
+        await updateProject(
+            p.id,
+            req.user.id,
+            { changeOrders },
+            "change_order_sent_to_client",
+            { id: order.id, expiresAt }
+        );
+
+        const frontendUrl = (
+            process.env.CLIENT_URL || "https://solodesk-frontend.onrender.com"
+        ).replace(/\/+$/, "");
+
+        res.json({
+            approvalUrl: `${frontendUrl}/client-approval/${token}`,
+            expiresAt
+        });
+    }
+);
+
+// Public endpoint: client views the change order.
+app.get("/api/client-approval/:token", async (req, res) => {
+    const token = req.params.token;
+
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    const p = await findProjectByApprovalTokenHash(hashApprovalToken(token));
+
+    if (!p) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    const order = (p.changeOrders || []).find(
+        item => item.clientApproval?.tokenHash === hashApprovalToken(token)
+    );
+
+    if (!order) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    if (new Date(order.clientApproval.expiresAt) <= new Date()) {
+        return res.status(410).json({ error: "This approval link has expired" });
+    }
+
+    res.setHeader("Cache-Control", "no-store");
+
+    res.json({
+        projectTitle: p.title,
+        clientName: p.clientName,
+        currency: p.currency,
+        changeOrder: {
+            id: order.id,
+            notes: order.notes || "",
+            items: (order.analysis?.items || []).map(item => ({
+                request: item.request,
+                classification: item.classification,
+                estimatedAdditionalHours: item.estimatedAdditionalHours
+            })),
+            extraHours: order.extraHours,
+            estimatedCost: order.estimatedCost,
+            status: order.status
+        },
+        decision: order.clientApproval.decision
+    });
+});
+
+// Public endpoint: client accepts or rejects the change order.
+app.post("/api/client-approval/:token/decision", async (req, res) => {
+    const token = req.params.token;
+
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    const parsed = z.object({
+        decision: z.enum(["client_approved", "client_rejected"])
+    }).safeParse(req.body);
+
+    if (!parsed.success) {
+        return res.status(400).json({
+            error: "Decision must be client_approved or client_rejected"
+        });
+    }
+
+    const tokenHash = hashApprovalToken(token);
+    const p = await findProjectByApprovalTokenHash(tokenHash);
+
+    if (!p) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    const changeOrders = [...(p.changeOrders || [])];
+    const index = changeOrders.findIndex(
+        order => order.clientApproval?.tokenHash === tokenHash
+    );
+
+    if (index === -1) {
+        return res.status(404).json({ error: "Invalid approval link" });
+    }
+
+    const order = changeOrders[index];
+
+    if (new Date(order.clientApproval.expiresAt) <= new Date()) {
+        return res.status(410).json({ error: "This approval link has expired" });
+    }
+
+    if (order.status !== "sent_to_client" ||
+        order.clientApproval.decision) {
+        return res.status(409).json({
+            error: "A decision has already been recorded or this order is no longer pending"
+        });
+    }
+
+    const decidedAt = new Date().toISOString();
+
+    changeOrders[index] = {
+        ...order,
+        status: parsed.data.decision,
+        clientApproval: {
+            ...order.clientApproval,
+            decision: parsed.data.decision,
+            decidedAt,
+            tokenHash: null
+        }
+    };
+
+    await updateProject(
+        p.id,
+        p.userId,
+        { changeOrders },
+        parsed.data.decision === "client_approved"
+            ? "change_order_client_approved"
+            : "change_order_client_rejected",
+        { id: order.id, decidedAt }
+    );
+
+    res.json({
+        success: true,
+        decision: parsed.data.decision,
+        decidedAt
+    });
+});
 
 app.get("/api/projects/:id/quotation.pdf", authRequired, async (req, res) => {
   try {

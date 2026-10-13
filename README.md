@@ -4,7 +4,8 @@
 
 SoloDesk Intelligence helps freelancers turn client briefs into proposals, establish an approved scope baseline, identify out-of-scope requests, and manage change orders before additional work begins.
 
-**Live Demo:** https://solodesk-frontend.onrender.com/
+**Live Demo:** https://solodesk-frontend.onrender.com
+
 **Demo Video:** https://www.youtube.com/watch?v=Di9GaBFcfmA
 
 ## Features

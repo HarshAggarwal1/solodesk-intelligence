@@ -1524,9 +1524,19 @@ function App() {
                       </div>
 
                       {selected.changeOrders.map((o) => {
-                        const approved =
-                          o.status ===
-                          "internally_approved";
+                        const statusLabels = {
+                            draft: "Draft",
+                            internally_approved: "Internally approved",
+                            sent_to_client: "Awaiting client",
+                            client_approved: "Client approved",
+                            client_rejected: "Client rejected",
+                        };
+
+                        const statusClass =
+                            o.status === "internally_approved" ||
+                            o.status === "client_approved"
+                                ? "success"
+                                : "demo";
 
                         return (
                           <div
@@ -1563,12 +1573,8 @@ function App() {
                             </div>
 
                             <div className="order-actions">
-                              <span
-                                className={`status-pill ${approved ? "success" : "demo"}`}
-                              >
-                                {approved
-                                  ? "Internally approved"
-                                  : "Draft"}
+                              <span className={`status-pill ${statusClass}`}>
+                                  {statusLabels[o.status] || o.status}
                               </span>
 
                               {o.status ===

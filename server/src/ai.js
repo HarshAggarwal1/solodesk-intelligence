@@ -153,23 +153,32 @@ async function callModel(system, user) {
 
 export async function generateProposal(project) {
 
+
   const prompt = `
-  Client/project brief:
+  You must create a real project proposal from the client brief below.
+
+  CLIENT BRIEF:
   ${project.brief}
 
-  Return JSON matching this shape:
+  Return exactly one valid JSON object with these fields:
   ${JSON.stringify(proposalSchema)}
 
-  Requirements must be atomic.
-  Estimated hours must be nonnegative numbers.
-  Do not invent a budget or claim that the client agreed to anything.
-  Use questions for missing information.
-
-  Return one JSON object only.
-  Include at most 20 requirements.
-  Keep each description under 300 characters.
-  Do not repeat the input brief.
+  IMPORTANT RULES:
+  - The schema describes data types, NOT example values.
+  - Never output literal placeholders such as "string", "number", or "string".
+  - Write a meaningful title and summary based on the actual brief.
+  - Extract concrete, atomic requirements from the brief.
+  - Include at most 20 requirements.
+  - Keep each requirement description under 300 characters.
+  - Estimated hours must be nonnegative numbers.
+  - State assumptions explicitly. Do not present assumptions as client-approved facts.
+  - Identify missing details as questions.
+  - Do not invent a budget or claim that the client agreed to anything.
+  - If the brief is vague, create a preliminary proposal and ask relevant questions.
+  - Do not repeat the input brief as the summary.
+  - Return JSON only, with no Markdown or commentary.
   `;
+
 
 
   const modelResult = await callModel(
@@ -183,6 +192,16 @@ export async function generateProposal(project) {
 }
 
 function normalizeProposal(data, project) {
+
+  if (
+    !data.title ||
+    data.title.trim().toLowerCase() === "string" ||
+    !data.summary ||
+    data.summary.trim().toLowerCase() === "string"
+  ) {
+    throw new Error("Gemma returned placeholder proposal values");
+  }
+
   const requirements = Array.isArray(data.requirements)
     ? data.requirements.map((r, i) => ({
       id: String(r.id || `req-${i + 1}`),

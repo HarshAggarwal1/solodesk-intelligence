@@ -24,6 +24,25 @@ const proposalSchema = {
   ]
 };
 
+function parseModelJson(content) {
+  // Remove Markdown code fences if present.
+  let text = content.trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  // If the model added explanatory text, extract the JSON object.
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Gemma did not return a valid JSON object");
+  }
+
+  text = text.slice(start, end + 1);
+  return JSON.parse(text);
+}
+
 async function callModel(system, user) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMMA_MODEL;
@@ -86,11 +105,8 @@ async function callModel(system, user) {
       throw new Error("Gemma API returned an empty response");
     }
 
-    return JSON.parse(
-      content
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/, "")
-    );
+    return parseModelJson(content);
+    
   } finally {
     clearTimeout(timer);
   }

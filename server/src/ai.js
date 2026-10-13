@@ -140,6 +140,9 @@ async function callModel(system, user) {
       .join("")
       .trim();
 
+    console.log("Gemma response preview:", content?.slice(0, 1500));
+    console.log("Gemma response length:", content?.length);
+
     if (!content) {
       throw new Error("Gemma API returned an empty response");
     }

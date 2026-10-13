@@ -285,6 +285,7 @@ function App() {
 
   
   
+  
   async function sendForApproval(orderId) {
       const result = await act(
           () =>
@@ -298,7 +299,10 @@ function App() {
       if (result?.approvalUrl) {
           try {
               await navigator.clipboard.writeText(result.approvalUrl);
-              setNotice("Approval link copied to clipboard. You can now share it with your client.");
+
+              setNotice("Approval link copied. Opening client approval page…");
+
+              window.open(result.approvalUrl, "_blank", "noopener,noreferrer");
           } catch {
               window.prompt(
                   "Automatic copying failed. Copy this approval link:",
@@ -307,6 +311,7 @@ function App() {
           }
       }
   }
+
 
 
 

@@ -1602,24 +1602,6 @@ function App() {
                                         Send for client approval
                                     </button>
                                 )}
-
-                                {o.status === "sent_to_client" && (
-                                    <span className="status-pill demo">
-                                        Awaiting client
-                                    </span>
-                                )}
-
-                                {o.status === "client_approved" && (
-                                    <span className="status-pill success">
-                                        Client approved
-                                    </span>
-                                )}
-
-                                {o.status === "client_rejected" && (
-                                    <span className="status-pill demo">
-                                        Client rejected
-                                    </span>
-                                )}
                             </div>
                           </div>
                         );

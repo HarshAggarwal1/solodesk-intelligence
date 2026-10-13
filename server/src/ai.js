@@ -154,34 +154,35 @@ async function callModel(system, user) {
 export async function generateProposal(project) {
 
 
+
   const prompt = `
-  You must create a real project proposal from the client brief below.
+Create a useful freelance project proposal based on this brief.
 
-  CLIENT BRIEF:
-  ${project.brief}
+CLIENT BRIEF:
+${project.brief}
 
-  Return exactly one valid JSON object with these fields:
-  ${JSON.stringify(proposalSchema)}
+Return exactly one valid JSON object with these fields:
+- title: meaningful project title
+- summary: concise explanation of the proposed work
+- requirements: array of objects, each with id, description, category, estimatedHours
+- assumptions: array of explicit assumptions
+- exclusions: array of work not included
+- questions: array of questions for the client
+- milestones: array of objects with name, description, percentage
 
-  IMPORTANT RULES:
-  - The schema describes data types, NOT example values.
-  - Never output literal placeholders such as "string", "number", or "string".
-  - Write a meaningful title and summary based on the actual brief.
-  - Extract concrete, atomic requirements from the brief.
-  - Include at most 20 requirements.
-  - Keep each requirement description under 300 characters.
-  - Estimated hours must be nonnegative numbers.
-  - State assumptions explicitly. Do not present assumptions as client-approved facts.
-  - Identify missing details as questions.
-  - Do not invent a budget or claim that the client agreed to anything.
-  - If the brief is vague, create a preliminary proposal and ask relevant questions.
-  - Do not repeat the input brief as the summary.
-  - Return JSON only, with no Markdown or commentary.
-  - Every field must contain actual values, not schema placeholders.
-  - Do not use ellipses (...), comments, or abbreviated arrays.
-  - Include no more than 8 requirements.
-  - Return a complete JSON object with every required field.
-  `;
+Rules:
+- Use actual content derived from the brief, never placeholders.
+- For "build a zip extraction app", identify plausible features such as ZIP upload,
+  archive validation, extraction, file listing, and error handling.
+- Include no more than 8 atomic requirements.
+- Keep descriptions under 300 characters.
+- Estimated hours must be nonnegative numbers.
+- Do not invent client approvals, budgets, or requirements.
+- Ask questions where platform, file-size limits, or security expectations are unclear.
+- Do not use ellipses or abbreviated arrays.
+- Return JSON only, without Markdown or commentary.
+`;
+
 
 
 

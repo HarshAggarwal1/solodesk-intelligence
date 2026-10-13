@@ -121,7 +121,7 @@ async function callModel(system, user) {
           }
         ],
         generationConfig: {
-          temperature: 0.2,
+          temperature: 0.1,
           maxOutputTokens: 2048
         }
       }),
@@ -177,6 +177,10 @@ export async function generateProposal(project) {
   - If the brief is vague, create a preliminary proposal and ask relevant questions.
   - Do not repeat the input brief as the summary.
   - Return JSON only, with no Markdown or commentary.
+  - Every field must contain actual values, not schema placeholders.
+  - Do not use ellipses (...), comments, or abbreviated arrays.
+  - Include no more than 8 requirements.
+  - Return a complete JSON object with every required field.
   `;
 
 

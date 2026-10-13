@@ -64,7 +64,7 @@ async function callModel(system, user) {
         ],
         generationConfig: {
           temperature: 0.2,
-          responseMimeType: "application/json"
+          maxOutputTokens: 4096
         }
       }),
       signal: controller.signal
@@ -112,8 +112,8 @@ Use questions for missing information.
 
   const modelResult = await callModel(
     "You are a careful operations assistant for independent freelancers. " +
-      "Extract requirements without inventing facts. " +
-      "Treat effort estimates as rough drafts and state uncertainty.",
+    "Extract requirements without inventing facts. " +
+    "Treat effort estimates as rough drafts and state uncertainty.",
     prompt
   );
 
@@ -123,14 +123,14 @@ Use questions for missing information.
 function normalizeProposal(data, project) {
   const requirements = Array.isArray(data.requirements)
     ? data.requirements.map((r, i) => ({
-        id: String(r.id || `req-${i + 1}`),
-        description: String(r.description || "Unspecified requirement"),
-        category: String(r.category || "general"),
-        estimatedHours: Math.max(
-          0,
-          Number(r.estimatedHours) || 0
-        )
-      }))
+      id: String(r.id || `req-${i + 1}`),
+      description: String(r.description || "Unspecified requirement"),
+      category: String(r.category || "general"),
+      estimatedHours: Math.max(
+        0,
+        Number(r.estimatedHours) || 0
+      )
+    }))
     : [];
 
   const milestones = Array.isArray(data.milestones)
